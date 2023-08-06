@@ -1,3 +1,4 @@
+# convert a JSON live feed to xml
 import json
 import xml.etree.ElementTree as ET
 import requests
@@ -51,7 +52,7 @@ def dict_to_xml(dictionary, parent=None):
                     element = ET.SubElement(parent, key)
                     dict_to_xml(item, parent=element)
             else:
-                if key == 'URL':
+                if key == 'url':
                     decoded_url = decode_url(value)
                     element = ET.SubElement(parent, key)
                     element.text = decoded_url
@@ -77,7 +78,7 @@ def update_decoded_urls(element):
     for child in element:
         update_decoded_urls(child)
 
-    if element.tag == 'URL':
+    if element.tag == 'url':
         decoded_url = decode_url(element.text)
         element.text = decoded_url
 
