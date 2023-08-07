@@ -30,14 +30,21 @@ def decode_url(encoded_url):
             decoded_str = decoded_bytes.decode('utf-8', 'ignore')
             # Use urllib.parse to extract the URL from the decoded string
             decoded_url = urlparse(decoded_str).geturl()
-        except UnicodeDecodeError:
-            decoded_url = "Error: Unicode decode error"
-        except AttributeError:
-            decoded_url = "Error: Attribute decode error"
-    else:
-        decoded_url = encoded_url
 
-    return decoded_url
+            # Split the decoded URL on the null character and return only the first part
+            split_url = decoded_url.split('\x01', 1)
+
+            # Remove non-printable characters from the URL
+            sanitized_url = ''.join(char for char in split_url[0] if unicodedata.category(char)[0] != 'C')
+
+            return sanitized_url
+        except UnicodeDecodeError:
+            return "Error: Unicode decode error"
+        except AttributeError:
+            return "Error: Attribute decode error"
+    else:
+        return encoded_url
+
 
 def sanitize_value(value):
     if isinstance(value, str):
@@ -67,9 +74,13 @@ def dict_to_xml(dictionary, parent=None, skip_keys=None):
                     element = ET.SubElement(parent, key)
                     dict_to_xml(item, parent=element, skip_keys=skip_keys)
             else:
-                element = ET.SubElement(parent, key)
+                # Change 'url' to 'link' when creating an XML element
+                element_key = 'link' if key == 'url' else key
+                element = ET.SubElement(parent, element_key)
                 if key == 'url':
-                    decoded_url = decode_url(value)
+                    # Split URL string on null character and decode only the first part
+                    split_url = value.split('\x01', 1)
+                    decoded_url = decode_url(split_url[0])
                     element.text = decoded_url
                 else:
                     element.text = str(value)
@@ -83,13 +94,12 @@ def dict_to_xml(dictionary, parent=None, skip_keys=None):
     return parent
 
 
-def write_xml_to_file(xml_element, filename):
-    # Update URLs with their decoded versions
-    update_decoded_urls(xml_element)
 
+
+def write_xml_to_file(xml_element, filename):
     # Log the XML content before writing it to the file
     xml_str = ET.tostring(xml_element, encoding='utf-8').decode('utf-8')
-    logging.info(f"XML content:\n{xml_str}")
+    logging.info(f"XML content:\\n{xml_str}")
 
     if os.path.exists(filename):
         # Load the existing XML file
@@ -117,17 +127,8 @@ def write_xml_to_file(xml_element, filename):
             tree.write(xml_buffer, encoding='utf-8', xml_declaration=True)
             with open(filename, 'wb') as file:
                 file.write(xml_buffer.getvalue())
-        print("Items appended successfully.")
+        print("New XML file generated successfully.")
 
-
-
-def update_decoded_urls(element):
-    for child in element:
-        update_decoded_urls(child)
-
-    if element.tag == 'url':
-        decoded_url = decode_url(element.text)
-        element.text = decoded_url
 
 # URL for the live JSON feed
 json_feed_url = "https://www.inoreader.com/stream/user/1005324229/tag/Ukraine/view/json"
