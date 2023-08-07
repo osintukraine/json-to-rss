@@ -10,6 +10,8 @@ import logging
 from xml.dom import minidom
 import io
 
+logging.basicConfig(level=logging.INFO)
+
 def fetch_json_data(url):
     response = requests.get(url)
     if response.status_code == 200:
@@ -47,6 +49,7 @@ def decode_url(encoded_url):
 
 
 def sanitize_value(value):
+    """Sanitizes a string value by removing non-printable characters."""
     if isinstance(value, str):
         # Remove non-printable characters from the string
         sanitized_value = ''.join(char for char in value if unicodedata.category(char)[0] != 'C')
@@ -54,49 +57,59 @@ def sanitize_value(value):
     else:
         return value
 
-def dict_to_xml(dictionary, parent=None, skip_keys=None):
+def inspect_and_convert_value(value):
+    """Inspects the value and converts it to a string if it's not a string."""
+    # If value is a list, print it for inspection
+    if isinstance(value, list):
+        print(f"Found list value: {value}")
+    return str(value)
+
+# Refined dict_to_xml_rss_corrected function without the encoded URL
+
+def dict_to_xml_rss_refined(dictionary, home_page_url, parent=None):
     if parent is None:
-        parent = ET.Element('root')
-
-    if skip_keys is None:
-        skip_keys = ['content_html', 'id']
-
-    if isinstance(dictionary, dict):
-        for key, value in dictionary.items():
-            if key in skip_keys:
-                continue
-
-            if isinstance(value, dict):
-                element = ET.SubElement(parent, key)
-                dict_to_xml(value, parent=element, skip_keys=skip_keys)
-            elif isinstance(value, list):
-                for item in value:
-                    element = ET.SubElement(parent, key)
-                    dict_to_xml(item, parent=element, skip_keys=skip_keys)
-            else:
-                # Change 'url' to 'link' when creating an XML element
-                element_key = 'link' if key == 'url' else key
-                element = ET.SubElement(parent, element_key)
-                if key == 'url':
-                    # Split URL string on null character and decode only the first part
-                    split_url = value.split('\x01', 1)
-                    decoded_url = decode_url(split_url[0])
-                    element.text = decoded_url
-                else:
-                    element.text = str(value)
-    elif isinstance(dictionary, list):
-        for item in dictionary:
-            element = ET.SubElement(parent, 'item')
-            dict_to_xml(item, parent=element, skip_keys=skip_keys)
+        parent = ET.Element('rss', version="2.0")
+        channel = ET.SubElement(parent, 'channel')
     else:
-        parent.text = str(dictionary)
+        channel = parent
+
+    # Set the main feed attributes
+    element = ET.SubElement(channel, 'title')
+    element.text = sanitize_value(dictionary.get('title', ''))
+    
+    element = ET.SubElement(channel, 'link')
+    element.text = sanitize_value(home_page_url)
+    
+    element = ET.SubElement(channel, 'description')
+    element.text = sanitize_value(dictionary.get('description', ''))
+
+    # Handle items
+    for item_data in dictionary.get('items', []):
+        item = ET.SubElement(channel, 'item')
+        
+        # Extract title and published_date attributes from each item
+        for key in ['title', 'published_date']:
+            if key in item_data:
+                sub_element = ET.SubElement(item, key)
+                sub_element.text = sanitize_value(item_data[key])
+        
+        # Handle decoded URL as <link>
+        if 'url' in item_data:
+            sub_element = ET.SubElement(item, 'link')
+            sub_element.text = decode_url(item_data['url'])
 
     return parent
 
+# Display the refined function
+dict_to_xml_rss_refined
 
 
 
 def write_xml_to_file(xml_element, filename):
+    # Debugging logic: Check for elements with list as text
+    for elem in xml_element.iter():
+        if isinstance(elem.text, list):
+            print(f"Element '{elem.tag}' has a list as its text: {elem.text}")
     # Log the XML content before writing it to the file
     xml_str = ET.tostring(xml_element, encoding='utf-8').decode('utf-8')
     logging.info(f"XML content:\\n{xml_str}")
@@ -135,10 +148,18 @@ json_feed_url = "https://www.inoreader.com/stream/user/1005324229/tag/Ukraine/vi
 
 # Fetch JSON data from the URL
 json_data = fetch_json_data(json_feed_url)
+print(f"JSON data fetched: {bool(json_data)}")
+
+# Derive home_page_url from json_feed_url
+home_page_url = json_feed_url.replace("/view/json", "/view/html")
+
 
 if json_data:
     # Convert JSON to XML
-    xml_root = dict_to_xml(json_data)
+    xml_root = dict_to_xml_rss_refined(json_data, home_page_url)
+
+if xml_root:
+    print("XML root generated successfully.")
 
     # Write XML to file
     write_xml_to_file(xml_root, 'feed.xml')
