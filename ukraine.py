@@ -10,6 +10,7 @@ import logging
 from xml.dom import minidom
 import io
 
+
 logging.basicConfig(level=logging.INFO)
 
 def fetch_json_data(url):
@@ -39,6 +40,11 @@ def decode_url(encoded_url):
             # Remove non-printable characters from the URL
             sanitized_url = ''.join(char for char in split_url[0] if unicodedata.category(char)[0] != 'C')
 
+            # Find the index of 'https://' and take the substring from that index
+            idx = sanitized_url.find('https://')
+            if idx != -1:
+                sanitized_url = sanitized_url[idx:]
+
             return sanitized_url
         except UnicodeDecodeError:
             return "Error: Unicode decode error"
@@ -56,6 +62,20 @@ def sanitize_value(value):
         return sanitized_value
     else:
         return value
+
+def sanitize_links(link_text):
+    """
+    Sanitizes the provided link text by removing any unexpected character
+    right before the "https://" portion.
+    """
+    if not link_text.startswith("http"):
+        # Find the position of "https://" in the string
+        https_pos = link_text.find("https://")
+        if https_pos > 0:
+            # Remove any character just before "https://"
+            return link_text[https_pos:]
+    return link_text
+
 
 def inspect_and_convert_value(value):
     """Inspects the value and converts it to a string if it's not a string."""
@@ -78,7 +98,7 @@ def dict_to_xml_rss_refined(dictionary, home_page_url, parent=None):
     element.text = sanitize_value(dictionary.get('title', ''))
     
     element = ET.SubElement(channel, 'link')
-    element.text = sanitize_value(home_page_url)
+    element.text = sanitize_links(home_page_url)
     
     element = ET.SubElement(channel, 'description')
     element.text = sanitize_value(dictionary.get('description', ''))
