@@ -1,0 +1,8 @@
+version: '3'
+services:
+  your_app_name:  # Replace 'your_app_name' with a name of your choice for the service
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - /home/user/my_project:/app
